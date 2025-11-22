@@ -4,8 +4,8 @@ nltk.download('vader_lexicon')
 from nltk.tokenize import sent_tokenize
 nltk.download('punkt_tab', quiet=True, force=True)
 from nltk.sentiment import SentimentIntensityAnalyzer
-import language_tool_python
-
+# import language_tool_python
+from spellchecker import SpellChecker
 # ================= HARD-CODED RUBRIC RULES =================
 
 SALUTATION_KEYWORDS = {
@@ -101,12 +101,32 @@ def score_speech_rate(word_count, duration_sec):
         score = 0
     return score, wpm
 
+# def score_grammar(text, word_count):
+#     tool = language_tool_python.LanguageTool('en-US')
+#     matches = tool.check(text)
+#     errors = len(matches)
+#     errors_per_100_words = errors / (word_count / 100) if word_count > 0 else 100
+
+#     grammar_score_val = 1 - min(errors_per_100_words / 10, 1)
+#     if grammar_score_val > 0.9:
+#         return 10, errors_per_100_words
+#     elif 0.7 <= grammar_score_val <= 0.89:
+#         return 8, errors_per_100_words
+#     elif 0.5 <= grammar_score_val <= 0.69:
+#         return 6, errors_per_100_words
+#     elif 0.3 <= grammar_score_val <= 0.49:
+#         return 4, errors_per_100_words
+#     else:
+#         return 2, errors_per_100_words
+
 def score_grammar(text, word_count):
-    tool = language_tool_python.LanguageTool('en-US')
-    matches = tool.check(text)
-    errors = len(matches)
+    spell = SpellChecker()
+    words = text.split()
+    misspelled = spell.unknown(words)
+    errors = len(misspelled)
     errors_per_100_words = errors / (word_count / 100) if word_count > 0 else 100
 
+    # Score out of 10, similar to your original style
     grammar_score_val = 1 - min(errors_per_100_words / 10, 1)
     if grammar_score_val > 0.9:
         return 10, errors_per_100_words
