@@ -2,7 +2,7 @@ import streamlit as st
 import nltk
 nltk.download('vader_lexicon')
 from nltk.tokenize import sent_tokenize
-nltk.download('punkt')
+nltk.download('punkt', quiet=True, force=True)
 from nltk.sentiment import SentimentIntensityAnalyzer
 import language_tool_python
 
