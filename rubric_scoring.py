@@ -1,11 +1,11 @@
 import streamlit as st
 import nltk
-nltk.download('vader_lexicon')
 from nltk.tokenize import sent_tokenize
-nltk.download('punkt_tab', quiet=True, force=True)
+nltk.download('vader_lexicon', quiet=True, force=True)
+nltk.download('punkt', quiet=True, force=True)
 from nltk.sentiment import SentimentIntensityAnalyzer
-from sentence_transformers import SentenceTransformer, util
 from spellchecker import SpellChecker
+from sentence_transformers import SentenceTransformer, util
 
 # ================= HARD-CODED RUBRIC RULES =================
 
@@ -49,6 +49,7 @@ RUBRIC_DESCRIPTIONS = [
     "My family includes [details].",
     "I enjoy doing [interest] in my free time.",
 ]
+
 # =================== SCORING FUNCTIONS ===================
 
 def score_salutation(text):
@@ -106,9 +107,6 @@ def score_speech_rate(word_count, duration_sec):
     else:
         score = 0
     return score, wpm
-
-
-
 
 # Spelling-based grammar scoring (Cloud compatible)
 def score_grammar(text, word_count):
@@ -186,6 +184,7 @@ def semantic_similarity(transcript, rubric_descs):
     return sims[max_sim_idx], rubric_descs[max_sim_idx], sims
 
 # =================== STREAMLIT DEPLOYMENT ===================
+
 def main():
     st.title("Self Introduction Scorer")
 
