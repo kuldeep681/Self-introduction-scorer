@@ -4,8 +4,9 @@ nltk.download('vader_lexicon')
 from nltk.tokenize import sent_tokenize
 nltk.download('punkt_tab', quiet=True, force=True)
 from nltk.sentiment import SentimentIntensityAnalyzer
-# import language_tool_python
+from sentence_transformers import SentenceTransformer, util
 from spellchecker import SpellChecker
+
 # ================= HARD-CODED RUBRIC RULES =================
 
 SALUTATION_KEYWORDS = {
@@ -38,6 +39,16 @@ FILLER_WORDS = [
     "right", "i mean", "well", "kinda", "sort of", "okay", "hmm", "ah"
 ]
 
+RUBRIC_DESCRIPTIONS = [
+    "I am excited to introduce myself.",
+    "My name is [student name].",
+    "I am from [city or school].",
+    "I am studying in [class].",
+    "My hobbies are [activity].",
+    "I aspire to be [goal].",
+    "My family includes [details].",
+    "I enjoy doing [interest] in my free time.",
+]
 # =================== SCORING FUNCTIONS ===================
 
 def score_salutation(text):
@@ -52,10 +63,8 @@ def score_keywords(text):
     text_lower = text.lower()
     mandatory_found = sum(1 for kw in MANDATORY_KEYWORDS if kw in text_lower)
     good_found = sum(1 for kw in GOOD_TO_HAVE_KEYWORDS if kw in text_lower)
-
     mandatory_score = min(mandatory_found * MANDATORY_POINT_PER, 20)
     good_score = min(good_found * GOOD_TO_HAVE_POINT_PER, 10)
-
     return mandatory_score + good_score, mandatory_score, good_score
 
 def check_flow(text):
@@ -67,7 +76,6 @@ def check_flow(text):
         ("Optional details", GOOD_TO_HAVE_KEYWORDS),
         ("Closing", ["thank you", "thanks", "thank"]),
     ]
-
     positions = []
     for label, keywords in flow_order:
         pos = -1
@@ -77,8 +85,6 @@ def check_flow(text):
                 if pos == -1 or found_pos < pos:
                     pos = found_pos
         positions.append(pos if pos != -1 else float('inf'))
-
-    # Checking if positions are strictly increasing
     filtered_positions = [p for p in positions if p != float('inf')]
     if filtered_positions == sorted(filtered_positions):
         return 5
@@ -101,32 +107,16 @@ def score_speech_rate(word_count, duration_sec):
         score = 0
     return score, wpm
 
-# def score_grammar(text, word_count):
-#     tool = language_tool_python.LanguageTool('en-US')
-#     matches = tool.check(text)
-#     errors = len(matches)
-#     errors_per_100_words = errors / (word_count / 100) if word_count > 0 else 100
 
-#     grammar_score_val = 1 - min(errors_per_100_words / 10, 1)
-#     if grammar_score_val > 0.9:
-#         return 10, errors_per_100_words
-#     elif 0.7 <= grammar_score_val <= 0.89:
-#         return 8, errors_per_100_words
-#     elif 0.5 <= grammar_score_val <= 0.69:
-#         return 6, errors_per_100_words
-#     elif 0.3 <= grammar_score_val <= 0.49:
-#         return 4, errors_per_100_words
-#     else:
-#         return 2, errors_per_100_words
 
+
+# Spelling-based grammar scoring (Cloud compatible)
 def score_grammar(text, word_count):
     spell = SpellChecker()
     words = text.split()
     misspelled = spell.unknown(words)
     errors = len(misspelled)
     errors_per_100_words = errors / (word_count / 100) if word_count > 0 else 100
-
-    # Score out of 10, similar to your original style
     grammar_score_val = 1 - min(errors_per_100_words / 10, 1)
     if grammar_score_val > 0.9:
         return 10, errors_per_100_words
@@ -143,7 +133,6 @@ def score_vocabulary(text, word_count):
     words = text.lower().split()
     unique_words = set(words)
     ttr = len(unique_words) / word_count if word_count > 0 else 0
-
     if ttr >= 0.9:
         return 10, ttr
     elif 0.7 <= ttr < 0.9:
@@ -159,7 +148,6 @@ def score_clarity(text, word_count):
     text_lower = text.lower()
     filler_count = sum(text_lower.count(fw) for fw in FILLER_WORDS)
     filler_rate = (filler_count / word_count) * 100 if word_count > 0 else 100
-
     if 0 <= filler_rate <= 3:
         score = 15
     elif 4 <= filler_rate <= 6:
@@ -176,7 +164,6 @@ def score_engagement(text):
     sia = SentimentIntensityAnalyzer()
     sentiment_scores = sia.polarity_scores(text)
     positive = sentiment_scores['pos']
-
     if positive >= 0.9:
         score = 15
     elif 0.7 <= positive < 0.9:
@@ -189,8 +176,16 @@ def score_engagement(text):
         score = 3
     return score, positive
 
-# =================== STREAMLIT DEPLOYMENT ===================
+# NLP transformer-based semantic similarity
+model = SentenceTransformer('all-MiniLM-L6-v2')
+def semantic_similarity(transcript, rubric_descs):
+    transcript_emb = model.encode(transcript, convert_to_tensor=True)
+    rubric_embs = model.encode(rubric_descs, convert_to_tensor=True)
+    sims = util.cos_sim(transcript_emb, rubric_embs).cpu().numpy().flatten()
+    max_sim_idx = sims.argmax()
+    return sims[max_sim_idx], rubric_descs[max_sim_idx], sims
 
+# =================== STREAMLIT DEPLOYMENT ===================
 def main():
     st.title("Self Introduction Scorer")
 
@@ -229,6 +224,9 @@ def main():
         # Engagement
         engagement_score, positive_sentiment = score_engagement(introduction)
 
+        # NLP transformer-based semantic similarity
+        sim_score, matched_rubric, all_sims = semantic_similarity(introduction, RUBRIC_DESCRIPTIONS)
+
         total_score = content_score + speech_score + grammar_score + vocab_score + clarity_score + engagement_score
 
         st.write("## Scores Breakdown")
@@ -244,7 +242,7 @@ def main():
         st.write(f"Speech Rate Score: {speech_score} / 10 (Words per minute: {wpm:.1f} WPM)")
 
         st.subheader("Language & Grammar")
-        st.write(f"Grammar Score: {grammar_score} / 10 (Errors per 100 words: {grammar_errors_per_100:.2f})")
+        st.write(f"Spelling/Grammar Score: {grammar_score} / 10 (Misspellings per 100 words: {grammar_errors_per_100:.2f})")
         st.write(f"Vocabulary Richness Score: {vocab_score} / 10 (TTR: {ttr:.2f})")
 
         st.subheader("Clarity")
@@ -252,6 +250,13 @@ def main():
 
         st.subheader("Engagement")
         st.write(f"Engagement Score: {engagement_score} / 15 (Positive sentiment score: {positive_sentiment:.2f})")
+
+        st.subheader("Semantic Similarity (NLP)")
+        st.write(f"Highest similarity to rubric: {sim_score:.2f}")
+        st.write(f'Most similar rubric item: "{matched_rubric}"')
+        st.write("Similarity to each rubric item:")
+        for desc, sim in zip(RUBRIC_DESCRIPTIONS, all_sims):
+            st.write(f'• "{desc}": {sim:.2f}')
 
 if __name__ == "__main__":
     main()
