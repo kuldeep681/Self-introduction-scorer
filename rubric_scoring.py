@@ -108,7 +108,6 @@ def score_speech_rate(word_count, duration_sec):
         score = 0
     return score, wpm
 
-# Spelling-based grammar scoring (Cloud compatible)
 def score_grammar(text, word_count):
     spell = SpellChecker()
     words = text.split()
@@ -174,7 +173,6 @@ def score_engagement(text):
         score = 3
     return score, positive
 
-# NLP transformer-based semantic similarity
 model = SentenceTransformer('all-MiniLM-L6-v2')
 def semantic_similarity(transcript, rubric_descs):
     transcript_emb = model.encode(transcript, convert_to_tensor=True)
@@ -182,6 +180,7 @@ def semantic_similarity(transcript, rubric_descs):
     sims = util.cos_sim(transcript_emb, rubric_embs).cpu().numpy().flatten()
     max_sim_idx = sims.argmax()
     return sims[max_sim_idx], rubric_descs[max_sim_idx], sims
+
 
 # =================== STREAMLIT DEPLOYMENT ===================
 
@@ -223,7 +222,7 @@ def main():
         # Engagement
         engagement_score, positive_sentiment = score_engagement(introduction)
 
-        # NLP transformer-based semantic similarity
+        # transformer-based semantic similarity
         sim_score, matched_rubric, all_sims = semantic_similarity(introduction, RUBRIC_DESCRIPTIONS)
 
         total_score = content_score + speech_score + grammar_score + vocab_score + clarity_score + engagement_score
